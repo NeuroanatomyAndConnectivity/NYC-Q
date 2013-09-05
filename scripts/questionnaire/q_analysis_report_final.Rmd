@@ -1,0 +1,119 @@
+Questionnaire data analysis
+===========================
+```{r include=FALSE, cache=FALSE}
+library(corrgram)
+library(nFactors)
+library(psych)
+library(PerformanceAnalytics)
+```
+Read the data:
+
+```{r}
+data = read.csv("/SCR/PowerFolder/Dropbox/papers/neural_correlates_of_mind_wandering/mriq_all_subs_18_60.csv")
+first_labels = c("Q01 - I thought about things I am currently worried about", 
+"Q02 - I thought about people I have just recently met",
+"Q03 - I thought of people I have known for a long time (friends)",
+"Q04 - I thought about members of my family",
+"Q05 - I thought about an event that took place earlier today",
+"Q06 - I thought about an interaction I may possibly have in the future",
+"Q07 - I thought about an interaction with somebody that took place in the past",
+"Q08 - I thought about something that happened at a place very close to me",
+"Q09 - I thought about something that made me feel guilty",
+"Q11 - I thought about something that happened in the recent past (last couple of days but not today)", 
+"Q12 - I thought about something that happened a long time ago in the past", 
+"Q13 - I thought about something that made me angry", 
+"Q14 - I thought about something that made me happy", 
+"Q15 - I thought about something that made me cheerful", 
+"Q16 - I thought about something that made me calm", 
+"Q17 - I thought about something that made me sad", 
+"Q18 - I thought about something that is important to me",
+"Q19 - I thought about something that could still happen today", 
+"Q20 - I thought about something that may take place in the distant future", 
+"Q21 - I thought about something that could take place in the near future (days or weeks but not today)", 
+"Q22 - I thought about personal worries",
+"Q23 - I thought about something that happened in a place far away from where I am now")
+
+second_labels = c("Q24 - In the form of images:",
+"Q25 - In the form of words:",
+"Q26 - Like an inner monologue or audiobook:",
+"Q27 - Like a television program or film:",
+"Q28 - Had a strong and consistent personal narrative:",
+"Q29 - Had a clear sense of purpose:",
+"Q30 - Vague and non-specific:",
+"Q31 - Fragmented and disjointed:)")
+first_ind = c(4,5,6,7,8,9,10,11,12,14,15,16,17,18,19,20,21,22,23,24,25,26)
+second_ind = c(27,28,29,30,31,32,33,34)
+data$sex = factor(data$sex, levels = c(1,2), labels = c("male", "female"))
+summary(data)
+```
+
+Plot pairwise relations:
+```{r fig.width=12, fig.height=13}
+
+corrgram(data, order=FALSE, lower.panel=panel.ellipse, 
+         upper.panel=panel.pie,text.panel=panel.txt, main="Questionnaire relations")
+```
+
+Scale the data.
+```{r}
+#data[c(first_ind,second_ind)] = scale(data[c(first_ind,second_ind)])
+```
+
+Figure out how many components to use to do EFA on the first part:
+```{r fig.width=10, fig.height=10}
+f= fa.parallel(data[first_ind],fm="pa",n.iter=100)
+```
+
+
+Fit EFA with 5 components sparse rotations
+```{r fig.width=12, fig.height=20}
+first_fit = fa(data[first_ind], nfactors=5, scores="tenBerge", fm="pa", rotate="oblimin")
+first_fit
+jet.colors <- colorRampPalette(c("blue", "light blue", "white", "yellow", "red"))
+first_interpretation = c("past", "positive", "future", "negative", "friends")
+op <- par(mar=c(30,5,1,1))
+image(loadings(first_fit), yaxt="n", xaxt="n",col=jet.colors(1200), zlim=c(-1,1))
+axis(2,at=seq(0,1,,dim(first_fit$loadings)[2]), labels=first_interpretation, las=2)
+axis(1,at=seq(0,1,,dim(first_fit$loadings)[1]), labels=first_labels, las=2)
+rm(op)
+```
+
+
+
+Figure out how many components to use to do EFA on the second part:
+```{r fig.width=10, fig.height=10}
+fa.parallel(data[second_ind],fm="pa",n.iter=500)
+```
+
+
+Fit EFA with 3 components sparse rotations
+```{r fig.width=12, fig.height=15}
+second_fit = fa(data[second_ind], nfactors=3, scores="tenBerge", fm="pa", rotate="oblimin")
+second_fit
+
+second_interpretation = c("specific_vague", "words", "images")
+op <- par(mar=c(30,7,1,1))
+image(loadings(second_fit), yaxt="n", xaxt="n",col=jet.colors(1200), zlim=c(-1,1))
+axis(2,at=seq(0,1,,dim(loadings(second_fit))[2]), labels=second_interpretation, las=2)
+axis(1,at=seq(0,1,,dim(loadings(second_fit))[1]), labels=second_labels, las=2)
+rm(op)
+```
+
+Constructing the final variables:
+```{r fig.width=10, fig.height=10}
+regressors = data[c(1,2,3)]
+regressors$firstSum = rowSums(data[first_ind])
+regressors$secondSum = rowSums(data[second_ind])
+regressors$allSum = regressors$firstSum + regressors$secondSum
+first_scores = first_fit$scores
+colnames(first_scores) = first_interpretation
+regressors = cbind(regressors, first_scores)
+second_scores = second_fit$scores
+colnames(second_scores) = second_interpretation
+regressors = cbind(regressors, second_scores)
+more_measures = read.csv("/SCR/PowerFolder/Dropbox/papers/neural_correlates_of_mind_wandering/mriq_ga_full_phenotypic_no_scales_cleaned.csv")[c(1,4,36)]
+regressors = merge(regressors, more_measures, by.x="queried_ursi", by.y="sub_id")
+#regressors[c(-1)] = scale(regressors[c(-1)], scale=FALSE)
+summary(regressors[c(2, 7,8,9,10,11,12,13,14)])
+write.csv(regressors, file="/SCR/PowerFolder/Dropbox/papers/neural_correlates_of_mind_wandering/regressors.csv")
+```
